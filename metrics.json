@@ -1,8 +1,8 @@
-{
-  "accuracy": null,
-  "precision": null,
-  "recall": null,
-  "f1_score": null,
-  "roc_auc": null,
-  "note": "ค่าที่ได้จากการทดสอบกับชุดข้อมูลทดสอบ (test set)"
-}
+   {
+     "accuracy": 0.89,
+     "precision": null,
+     "recall": null,
+     "f1_score": null,
+     "roc_auc": null,
+     "note": "ค่าที่ได้จากการทดสอบกับชุดข้อมูลทดสอบ (test set)"
+   }
