@@ -1,9 +1,14 @@
 {
-  "accuracy": null,
-  "precision": null,
-  "recall": null,
-  "f1_score": null,
-  "roc_auc": null,
-  "confusion_matrix": {"tn": null, "fp": null, "fn": null, "tp": null},
+  "accuracy": 0.9033,
+  "precision": 0.7626,
+  "recall": 0.555,
+  "f1_score": 0.6424,
+  "roc_auc": 0.9255,
+  "confusion_matrix": {
+    "tn": 1993,
+    "fp": 66,
+    "fn": 170,
+    "tp": 212
+  },
   "note": "ค่าที่ได้จากการทดสอบกับชุดข้อมูลทดสอบ (test set)"
 }
