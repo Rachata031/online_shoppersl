@@ -137,6 +137,54 @@ def load_metrics() -> dict:
         return {}
 
 
+def get_confusion(metrics: dict):
+    """คืน (tn, fp, fn, tp) ถ้ากรอกครบใน metrics.json ไม่เช่นนั้นคืน None"""
+    cm = metrics.get("confusion_matrix") or {}
+    try:
+        vals = [cm[k] for k in ("tn", "fp", "fn", "tp")]
+    except KeyError:
+        return None
+    if any(v is None for v in vals):
+        return None
+    return tuple(int(v) for v in vals)
+
+
+def fill_metrics_from_confusion(metrics: dict) -> dict:
+    """คำนวณ Accuracy/Precision/Recall/F1 จาก Confusion Matrix ในกรณีที่ยังไม่ได้กรอกค่าเหล่านั้น"""
+    out = dict(metrics)
+    cm = get_confusion(metrics)
+    if cm is None:
+        return out
+    tn, fp, fn, tp = cm
+    total = tn + fp + fn + tp
+    if total == 0:
+        return out
+    precision = tp / (tp + fp) if (tp + fp) else None
+    recall = tp / (tp + fn) if (tp + fn) else None
+    f1 = 2 * precision * recall / (precision + recall) if precision and recall else None
+    for key, val in [
+        ("accuracy", (tp + tn) / total),
+        ("precision", precision),
+        ("recall", recall),
+        ("f1_score", f1),
+    ]:
+        if out.get(key) is None:
+            out[key] = val
+    return out
+
+
+def confusion_html(cm) -> str:
+    tn, fp, fn, tp = cm
+    return f"""
+    <table class="cm">
+      <tr><th></th><th colspan="2">โมเดลทำนายว่า</th></tr>
+      <tr><th></th><th>ไม่ซื้อ</th><th>ซื้อ</th></tr>
+      <tr><th>จริง: ไม่ซื้อ</th><td class="ok">{tn:,}</td><td>{fp:,}</td></tr>
+      <tr><th>จริง: ซื้อ</th><td>{fn:,}</td><td class="ok">{tp:,}</td></tr>
+    </table>
+    """
+
+
 def as_percent(value):
     """แปลงค่า 0-1 (หรือ 0-100) เป็นข้อความเปอร์เซ็นต์"""
     if value is None:
@@ -289,6 +337,11 @@ html, body, [class*="css"], .stApp { font-family: 'Noto Sans Thai', sans-serif; 
 .metric-name { font-size: 0.8rem; color: #6B7280; }
 .metric-value { font-size: 1.6rem; font-weight: 600; color: #2F5D50; }
 
+.cm { width: 100%; border-collapse: collapse; margin-top: 0.75rem; font-size: 0.9rem; }
+.cm th { color: #6B7280; font-weight: 500; padding: 0.4rem 0.6rem; text-align: center; }
+.cm td { text-align: center; padding: 0.7rem; border: 1px solid #E5E7EB; background: #FFFFFF; color: #4B5563; }
+.cm td.ok { background: #EEF4F1; color: #2F5D50; font-weight: 600; }
+
 .app-footer { text-align: center; color: #6B7280; font-size: 0.85rem;
               border-top: 1px solid #E5E7EB; margin-top: 2.5rem; padding-top: 1rem; }
 .app-footer b { color: #1F2937; font-weight: 500; }
@@ -371,8 +424,8 @@ def render_form():
         with st.container(border=True):
             section(2, "คุณภาพการเข้าชม", "ตัวเลขจากระบบวิเคราะห์เว็บไซต์ เช่น Google Analytics — ถ้าไม่ทราบให้ใช้ค่าเริ่มต้น")
             c1, c2, c3, c4 = st.columns(4)
-            bounce = c1.number_input("ออกทันที (%)", 0.0, 100.0, step=0.5, format="%.1f", key="bounce_pct",
-                                     help="สัดส่วนผู้ที่เข้ามาแล้วออกโดยไม่ทำอะไรต่อ (ส่วนใหญ่ไม่เกิน 20%)")
+            bounce = c1.number_input("อัตราตีกลับ (%)", 0.0, 100.0, step=0.5, format="%.1f", key="bounce_pct",
+                                     help="Bounce Rate: สัดส่วนผู้ที่เข้ามาแล้วออกทันทีโดยไม่ทำอะไรต่อ (ส่วนใหญ่ไม่เกิน 20%)")
             exit_ = c2.number_input("ออกจากหน้า (%)", 0.0, 100.0, step=0.5, format="%.1f", key="exit_pct",
                                     help="สัดส่วนที่หน้าเว็บนั้นเป็นหน้าสุดท้ายก่อนผู้ใช้ออกจากเว็บ (ส่วนใหญ่ไม่เกิน 20%)")
             page_val = c3.number_input("มูลค่าหน้าเว็บ", 0.0, 500.0, step=1.0, key="page_value",
@@ -437,7 +490,7 @@ def render_metrics():
     st.markdown("---")
     section(4, "ความแม่นยำของระบบ", "ผลการประเมินโมเดลกับข้อมูลทดสอบที่โมเดลไม่เคยเห็นมาก่อน")
 
-    metrics = load_metrics()
+    metrics = fill_metrics_from_confusion(load_metrics())
     items = [
         ("Accuracy", "ความแม่นยำ (Accuracy)", metrics.get("accuracy"), True),
         ("Precision", "Precision", metrics.get("precision"), False),
@@ -462,6 +515,12 @@ def render_metrics():
 
     note = metrics.get("note")
     st.caption(note if note else "Accuracy คือสัดส่วนของการทำนายที่ถูกต้องทั้งหมด")
+
+    cm = get_confusion(metrics)
+    if cm is not None:
+        st.markdown('<div class="section-hint" style="margin-top:1rem">ตาราง Confusion Matrix '
+                    '(ช่องสีเขียวคือทำนายถูก)</div>', unsafe_allow_html=True)
+        st.markdown(confusion_html(cm), unsafe_allow_html=True)
 
 
 def render_footer():
